@@ -12,3 +12,6 @@ fastapi
 uvicorn
 langchain
 pygame
+streamlit_webrtc
+python-multipart
+pydantic

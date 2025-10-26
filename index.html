@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>🎙️ Speaking AI</title>
+  <style>
+    body { font-family: sans-serif; padding: 2rem; }
+    #chat { border: 1px solid #ccc; padding: 1rem; height: 400px; overflow-y: auto; }
+    .user { color: blue; margin-bottom: 0.5rem; }
+    .ai { color: green; margin-bottom: 0.5rem; }
+    .status { color: orange; margin-bottom: 0.5rem; font-style: italic; }
+    #talk { padding: 0.5rem 1rem; font-size: 16px; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+<h1>🎙️ Speaking AI</h1>
+<div id="chat"></div>
+<button id="talk">🎙️ Push to Talk</button>
+
+<script>
+const chatDiv = document.getElementById('chat');
+const talkBtn = document.getElementById('talk');
+let ws = new WebSocket("ws://127.0.0.1:8000/ws/ai");
+ws.binaryType = "arraybuffer";
+let audioStream = null; // reuse stream
+
+function addStatus(text) {
+  const div = document.createElement('div');
+  div.className = 'status';
+  div.textContent = text;
+  chatDiv.appendChild(div);
+  chatDiv.scrollTop = chatDiv.scrollHeight;
+}
+
+function addMessage(role, text) {
+  const div = document.createElement('div');
+  div.className = role;
+  div.textContent = text;
+  chatDiv.appendChild(div);
+  chatDiv.scrollTop = chatDiv.scrollHeight;
+}
+
+// Handle WebSocket messages
+ws.onmessage = (event) => {
+  const data = event.data;
+  if (data.startsWith("status::")) addStatus(data.replace("status::",""));
+  else if (data.startsWith("user::")) addMessage("user", data.replace("user::",""));
+  else if (data.startsWith("ai::")) addMessage("ai", data.replace("ai::",""));
+  else if (data.startsWith("done::")) {
+    const tts_url = data.replace("done::","");
+    if (tts_url) {
+      addStatus("🔊 Playing response...");
+      const audio = new Audio(`http://127.0.0.1:8000${tts_url}`);
+      audio.play();
+      audio.onended = () => addStatus("✅ Done.");
+    } else {
+      addStatus("⚠️ No TTS available.");
+    }
+    talkBtn.disabled = false;
+  }
+};
+
+ws.onerror = (err) => {
+  addStatus("❌ WebSocket error.");
+  talkBtn.disabled = false;
+};
+
+// Request mic only once and reuse
+async function getAudioStream() {
+  if (!audioStream) {
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
+  return audioStream;
+}
+
+// Record and send audio
+talkBtn.onclick = async () => {
+  talkBtn.disabled = true;
+  addStatus("🎧 Recording...");
+
+  const stream = await getAudioStream();
+  const mediaRecorder = new MediaRecorder(stream);
+  let audioChunks = [];
+
+  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(audioChunks, { type: 'audio/wav' });
+    const arrayBuffer = await blob.arrayBuffer();
+    ws.send(arrayBuffer);  // send audio to server
+    addStatus("🧠 Sending audio...");
+  };
+
+  mediaRecorder.start();
+  setTimeout(() => mediaRecorder.stop(), 10000); // auto-stop
+};
+</script>
+</body>
+</html>

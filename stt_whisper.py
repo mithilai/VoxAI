@@ -145,6 +145,7 @@ import os
 import collections
 import time
 import traceback
+import uuid
 
 # ----------------- Config -----------------
 model = whisper.load_model("base")  # Load once globally
@@ -193,36 +194,70 @@ def record_with_vad(max_duration=10, silence_timeout=1.0):
     return np.concatenate(audio_frames, axis=0)
 
 # ----------------- Transcription -----------------
-def transcribe_audio(audio: np.ndarray):
-    """
-    Save numpy audio to temp WAV, transcribe with Whisper, return (transcript, path).
-    Automatically deletes file after use.
-    """
-    audio_path = AUDIO_FILENAME
-    transcript = ""
+# def transcribe_audio(audio: np.ndarray):
+#     """
+#     Save numpy audio to temp WAV, transcribe with Whisper, return (transcript, path).
+#     Automatically deletes file after use.
+#     """
+#     audio_path = AUDIO_FILENAME
+#     transcript = ""
 
-    try:
-        # Ensure correct dtype for WAV
+#     try:
+#         # Ensure correct dtype for WAV
+#         if not np.issubdtype(audio.dtype, np.integer):
+#             audio = np.int16(audio / np.max(np.abs(audio)) * 32767)
+
+#         # Save audio temporarily
+#         wavio.write(audio_path, audio, sample_rate, sampwidth=2)
+
+#         # Transcribe using Whisper
+#         result = model.transcribe(audio_path)
+#         transcript = result.get("text", "").strip()
+
+#     except Exception as e:
+#         print(f"❌ Error in Whisper transcription: {e}")
+#         traceback.print_exc()
+
+#     finally:
+#         # Cleanup after use
+#         if os.path.exists(audio_path):
+#             try:
+#                 os.remove(audio_path)
+#             except Exception as cleanup_error:
+#                 print(f"⚠️ Failed to delete temp file: {cleanup_error}")
+
+#     return transcript, audio_path
+
+# inside stt_whisper.py
+
+def transcribe_audio(audio=None, file_path=None):
+    """
+    Transcribe audio.
+    Provide either:
+    - audio: NumPy array
+    - file_path: path to wav file
+    Returns: (transcript, path)
+    """
+    import wavio
+    transcript = ""
+    
+    if file_path is not None:
+        path_to_use = file_path
+    elif audio is not None:
+        TEMP_DIR = os.path.join(os.getcwd(), "temp")
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        path_to_use = os.path.join(TEMP_DIR, f"{uuid.uuid4().hex}.wav")
         if not np.issubdtype(audio.dtype, np.integer):
             audio = np.int16(audio / np.max(np.abs(audio)) * 32767)
+        wavio.write(path_to_use, audio, 16000, sampwidth=2)
+    else:
+        raise ValueError("Provide either audio array or file_path")
 
-        # Save audio temporarily
-        wavio.write(audio_path, audio, sample_rate, sampwidth=2)
-
-        # Transcribe using Whisper
-        result = model.transcribe(audio_path)
+    try:
+        from whisper import load_model
+        model = load_model("base")
+        result = model.transcribe(path_to_use)
         transcript = result.get("text", "").strip()
-
     except Exception as e:
-        print(f"❌ Error in Whisper transcription: {e}")
-        traceback.print_exc()
-
-    finally:
-        # Cleanup after use
-        if os.path.exists(audio_path):
-            try:
-                os.remove(audio_path)
-            except Exception as cleanup_error:
-                print(f"⚠️ Failed to delete temp file: {cleanup_error}")
-
-    return transcript, audio_path
+        print(f"❌ Whisper transcription error: {e}")
+    return transcript, path_to_use
