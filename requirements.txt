@@ -1,0 +1,14 @@
+elevenlabs
+streamlit
+sounddevice
+numpy
+webrtcvad
+wavio
+langchain_groq
+langchain_community
+openai-whisper
+python-dotenv
+fastapi
+uvicorn
+langchain
+pygame

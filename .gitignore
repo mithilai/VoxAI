@@ -1,0 +1,4 @@
+.env
+mithilaienv/
+__pycache__/
+*.pyc
